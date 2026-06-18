@@ -29,6 +29,8 @@ namespace MinQQClient
         private void InitializeComponent()
         {
             this.panel1 = new System.Windows.Forms.Panel();
+            this.btnApply = new System.Windows.Forms.Button();
+            this.btnAdd = new System.Windows.Forms.Button();
             this.lblTitle = new System.Windows.Forms.Label();
             this.panel2 = new System.Windows.Forms.Panel();
             this.btnSend = new System.Windows.Forms.Button();
@@ -38,25 +40,46 @@ namespace MinQQClient
             this.panel1.SuspendLayout();
             this.panel2.SuspendLayout();
             this.SuspendLayout();
-            // 
+            //
             // panel1
-            // 
+            //
+            this.panel1.Controls.Add(this.btnApply);
+            this.panel1.Controls.Add(this.btnAdd);
             this.panel1.Controls.Add(this.lblTitle);
             this.panel1.Dock = System.Windows.Forms.DockStyle.Top;
             this.panel1.Location = new System.Drawing.Point(0, 0);
             this.panel1.Name = "panel1";
             this.panel1.Size = new System.Drawing.Size(1379, 123);
             this.panel1.TabIndex = 0;
-            // 
+            //
+            // btnApply
+            //
+            this.btnApply.Location = new System.Drawing.Point(1180, 35);
+            this.btnApply.Name = "btnApply";
+            this.btnApply.Size = new System.Drawing.Size(90, 50);
+            this.btnApply.TabIndex = 2;
+            this.btnApply.Text = "好友申请";
+            this.btnApply.UseVisualStyleBackColor = true;
+            this.btnApply.Click += new System.EventHandler(this.btnApply_Click);
+            //
+            // btnAdd
+            //
+            this.btnAdd.Location = new System.Drawing.Point(1070, 35);
+            this.btnAdd.Name = "btnAdd";
+            this.btnAdd.Size = new System.Drawing.Size(90, 50);
+            this.btnAdd.TabIndex = 1;
+            this.btnAdd.Text = "添加好友";
+            this.btnAdd.UseVisualStyleBackColor = true;
+            this.btnAdd.Click += new System.EventHandler(this.btnAdd_Click);
+            //
             // lblTitle
-            // 
-            this.lblTitle.Dock = System.Windows.Forms.DockStyle.Left;
-            this.lblTitle.Location = new System.Drawing.Point(0, 0);
+            //
+            this.lblTitle.Location = new System.Drawing.Point(20, 0);
             this.lblTitle.Name = "lblTitle";
-            this.lblTitle.Size = new System.Drawing.Size(1376, 123);
+            this.lblTitle.Size = new System.Drawing.Size(400, 123);
             this.lblTitle.TabIndex = 0;
             this.lblTitle.Text = "label1";
-            this.lblTitle.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            this.lblTitle.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // panel2
             // 
@@ -134,5 +157,7 @@ namespace MinQQClient
         private System.Windows.Forms.RichTextBox rtbChatHistory;
         private System.Windows.Forms.Button btnSend;
         private System.Windows.Forms.TextBox txtMessage;
+        private System.Windows.Forms.Button btnAdd;
+        private System.Windows.Forms.Button btnApply;
     }
 }

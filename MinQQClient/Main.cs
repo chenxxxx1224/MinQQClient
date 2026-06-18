@@ -98,10 +98,53 @@ namespace MinQQClient
                 case 2:  // 收到聊天消息
                     ReceiveChatMessage(msg.Content);
                     break;
+                case 8:  // 好友申请通知
+                    HandleFriendRequestNotification(msg.Content);
+                    break;
                 case 100:  // 登录成功响应（不处理）
                     break;
                 case 101:  // 登录失败响应（不处理）
                     break;
+            }
+        }
+
+        // 处理好友申请通知
+        private void HandleFriendRequestNotification(string content)
+        {
+            // 检查是否需要刷新好友列表
+            bool needRefresh = content.Contains("|refresh");
+            if (needRefresh)
+            {
+                content = content.Replace("|refresh", "");
+            }
+
+            if (content.StartsWith("accepted:"))
+            {
+                // 对方同意了好友请求
+                string[] parts = content.Substring("accepted:".Length).Split(':');
+                if (parts.Length >= 2)
+                {
+                    string username = parts[1];
+                    AppendSystemMessage($"{username} 已同意您的好友请求！现在可以开始聊天了。");
+                }
+                // 刷新好友列表
+                LoadOnlineUsers();
+            }
+            else if (content.StartsWith("friend_added:"))
+            {
+                // 自己同意了对方的好友请求，刷新自己的好友列表
+                AppendSystemMessage($"已添加好友！");
+                LoadOnlineUsers();
+            }
+            else
+            {
+                // 收到好友请求
+                string[] parts = content.Split(':');
+                if (parts.Length >= 2)
+                {
+                    string fromUsername = parts[1];
+                    AppendSystemMessage($"{fromUsername} 向你发送了好友请求，请在【好友申请】中处理！");
+                }
             }
         }
 
@@ -151,6 +194,14 @@ namespace MinQQClient
         // 收到聊天消息
         private void ReceiveChatMessage(string content)
         {
+            // 检查是否是错误响应
+            if (content.StartsWith("not_friend|"))
+            {
+                string errorMsg = content.Substring("not_friend|".Length);
+                AppendSystemMessage(errorMsg);
+                return;
+            }
+
             // 格式：senderId:message
             string[] parts = content.Split(new string[] { ":" }, 2, StringSplitOptions.None);
             if (parts.Length < 2) return;
@@ -284,7 +335,19 @@ namespace MinQQClient
             rtbChatHistory.ScrollToCaret();
         }
 
-       
+        // 添加好友按钮点击事件
+        private void btnAdd_Click(object sender, EventArgs e)
+        {
+            AddFriend addFriendForm = new AddFriend(client);
+            addFriendForm.ShowDialog();
+        }
+
+        // 好友申请按钮点击事件
+        private void btnApply_Click(object sender, EventArgs e)
+        {
+            FriendRequestForm requestForm = new FriendRequestForm(client);
+            requestForm.ShowDialog();
+        }
     }
 
     // 聊天消息结构
