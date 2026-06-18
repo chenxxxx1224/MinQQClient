@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Windows.Forms;
 using System.Text.Json;
 
@@ -10,10 +11,36 @@ namespace MinQQClient
         private int? searchResultUserId;  // 搜索结果的用户ID
         private string searchResultUsername;  // 搜索结果的用户名
 
+        // 用于等待消息响应的同步原语
+        private AutoResetEvent searchResponseEvent = new AutoResetEvent(false);
+        private AutoResetEvent addResponseEvent = new AutoResetEvent(false);
+        private NetMessage searchResponse;
+        private NetMessage addResponse;
+
         public AddFriend(Client client)
         {
             InitializeComponent();
             this.client = client;
+
+            // 订阅消息事件
+            client.OnMessageReceived += OnServerMessage;
+        }
+
+        // 处理服务端消息
+        private void OnServerMessage(NetMessage msg)
+        {
+            // 搜索响应 (MsgType = 4)
+            if (msg.MsgType == 4 && searchResponse == null)
+            {
+                searchResponse = msg;
+                searchResponseEvent.Set();
+            }
+            // 添加好友响应 (MsgType = 5)
+            else if (msg.MsgType == 5 && addResponse == null)
+            {
+                addResponse = msg;
+                addResponseEvent.Set();
+            }
         }
 
         // 搜索用户
@@ -41,16 +68,19 @@ namespace MinQQClient
 
             try
             {
+                // 重置响应状态
+                searchResponse = null;
+
                 // 发送搜索请求（MsgType = 4, 格式：search|userId）
                 await client.SendMessageAsync(4, $"search|{userId}");
 
-                // 等待搜索结果
-                var response = await client.ReceiveMessageAsync();
+                // 等待搜索结果（最多等5秒）
+                bool gotResponse = searchResponseEvent.WaitOne(5000);
 
-                if (response != null && response.MsgType == 4)
+                if (gotResponse && searchResponse != null && searchResponse.MsgType == 4)
                 {
                     // 格式：success|userId|username 或 fail|reason
-                    string[] parts = response.Content.Split(new[] { '|' }, 3);
+                    string[] parts = searchResponse.Content.Split(new[] { '|' }, 3);
                     if (parts[0] == "success")
                     {
                         searchResultUserId = int.Parse(parts[1]);
@@ -63,6 +93,10 @@ namespace MinQQClient
                         searchResultUsername = null;
                         txtResult.Text = "未找到该用户";
                     }
+                }
+                else
+                {
+                    MessageBox.Show("搜索超时，请重试！", "提示");
                 }
             }
             catch (Exception ex)
@@ -82,31 +116,38 @@ namespace MinQQClient
 
             try
             {
+                // 重置响应状态
+                addResponse = null;
+
                 // 发送添加好友请求（MsgType = 5, 格式：toUserId）
                 await client.SendMessageAsync(5, searchResultUserId.Value.ToString());
 
-                // 等待响应
-                var response = await client.ReceiveMessageAsync();
+                // 等待响应（最多等5秒）
+                bool gotResponse = addResponseEvent.WaitOne(5000);
 
-                if (response != null && response.MsgType == 5)
+                if (gotResponse && addResponse != null && addResponse.MsgType == 5)
                 {
-                    if (response.Content == "success")
+                    if (addResponse.Content == "success")
                     {
                         MessageBox.Show("好友请求已发送！", "提示");
                         this.Close();
                     }
-                    else if (response.Content == "already_friends")
+                    else if (addResponse.Content == "already_friends")
                     {
                         MessageBox.Show("该用户已经是您的好友！", "提示");
                     }
-                    else if (response.Content == "already_sent")
+                    else if (addResponse.Content == "already_sent")
                     {
                         MessageBox.Show("您已发送过好友请求，请等待对方处理！", "提示");
                     }
                     else
                     {
-                        MessageBox.Show("发送失败：" + response.Content, "提示");
+                        MessageBox.Show("发送失败：" + addResponse.Content, "提示");
                     }
+                }
+                else
+                {
+                    MessageBox.Show("操作超时，请重试！", "提示");
                 }
             }
             catch (Exception ex)
@@ -119,6 +160,15 @@ namespace MinQQClient
         private void btnClose_Click(object sender, EventArgs e)
         {
             this.Close();
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            // 取消订阅
+            client.OnMessageReceived -= OnServerMessage;
+            searchResponseEvent.Dispose();
+            addResponseEvent.Dispose();
+            base.OnFormClosing(e);
         }
     }
 }

@@ -77,6 +77,8 @@ namespace MinQQClient
                         {
                             var msg = JsonSerializer.Deserialize<NetMessage>(completeJson);
                             HandleServerMessage(msg);
+                            // 触发消息事件，通知其他订阅者（如 AddFriendForm、FriendRequestForm）
+                            client.RaiseMessageReceived(msg);
                         }
                     }
                 }

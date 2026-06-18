@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Sockets;
@@ -18,6 +18,9 @@ namespace MinQQClient
         public int UserId { get; set; }
         public string Username { get; set; }
 
+        // 消息回调事件（解决多个接收者竞争消息的问题）
+        public event Action<NetMessage> OnMessageReceived;
+
         public async Task ConnectAsync(string ip = "127.0.0.1", int port = 8888)
         {
             _client = new TcpClient();
@@ -34,7 +37,13 @@ namespace MinQQClient
             await _stream.WriteAsync(data, 0, data.Length);
         }
 
-        // 接收服务端返回的消息
+        // 触发消息事件（供 Main.cs 调用）
+        public void RaiseMessageReceived(NetMessage msg)
+        {
+            OnMessageReceived?.Invoke(msg);
+        }
+
+        // 接收服务端返回的消息（保留但不使用，由 Main.cs 统一接收）
         public async Task<NetMessage> ReceiveMessageAsync()
         {
             byte[] buffer = new byte[4096];
