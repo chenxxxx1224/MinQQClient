@@ -52,6 +52,10 @@ public static class MessageHandler
                 case 7:  // 处理好友申请（同意/拒绝）
                     await HandleProcessFriendRequest(msg.Content, clientInfo, server);
                     break;
+
+                case 10:  // 注册
+                    await HandleRegister(msg.Content, clientInfo, server);
+                    break;
             }
         }
         catch (Exception ex)
@@ -363,6 +367,50 @@ public static class MessageHandler
         }
 
         await SendResponseAsync(clientInfo.Stream, 7, "success");
+    }
+
+    // 处理注册
+    private static async Task HandleRegister(string content, ClientInfo clientInfo, TcpServer server)
+    {
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"[收到注册请求] 信息: {content}");
+        Console.ResetColor();
+
+        string[] parts = content.Split('|');
+        if (parts.Length >= 2)
+        {
+            string account = parts[0].Trim();
+            string password = parts[1].Trim();
+
+            // 检查账号是否已存在
+            string checkSql = $"SELECT COUNT(*) FROM [User] WHERE Username = '{account}'";
+            var result = Dao.getData(checkSql);
+            int count = Convert.ToInt32(result.Rows[0][0]);
+
+            if (count > 0)
+            {
+                // 账号已存在
+                await SendResponseAsync(clientInfo.Stream, 10, "fail|账号已存在，请换一个用户名！");
+                Console.WriteLine($"注册失败：账号 {account} 已存在");
+                return;
+            }
+
+            // 插入新用户（Status = 1 表示在线/激活）
+            string insertSql = $"INSERT INTO [User] (Username, Password, Status) VALUES ('{account}', '{password}', 1); SELECT SCOPE_IDENTITY();";
+            var insertResult = Dao.getData(insertSql);
+
+            if (insertResult != null && insertResult.Rows.Count > 0)
+            {
+                int newUserId = Convert.ToInt32(insertResult.Rows[0][0]);
+                await SendResponseAsync(clientInfo.Stream, 10, $"success|{newUserId}");
+                Console.WriteLine($"注册成功：账号 {account}, UserID = {newUserId}");
+            }
+            else
+            {
+                await SendResponseAsync(clientInfo.Stream, 10, "fail|注册失败，请重试！");
+                Console.WriteLine($"注册失败：插入数据库失败");
+            }
+        }
     }
 
     // 发送响应消息

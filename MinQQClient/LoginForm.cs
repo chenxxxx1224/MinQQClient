@@ -28,8 +28,14 @@ namespace MinQQClient
 
         private async void button1_Click(object sender, EventArgs e)
         {
-            string account = txt_user.Text;
-            string password = txt_pwd.Text;
+            string account = txt_user.Text.Trim();
+            string password = txt_pwd.Text.Trim();
+
+            if (string.IsNullOrEmpty(account) || string.IsNullOrEmpty(password))
+            {
+                MessageBox.Show("请输入账号和密码！", "提示");
+                return;
+            }
 
             string content = $"{account}|{password}";
 
@@ -56,6 +62,13 @@ namespace MinQQClient
             {
                 MessageBox.Show("账号或密码错误！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private void btn_register_Click(object sender, EventArgs e)
+        {
+            // 打开注册窗口
+            RegisterForm registerForm = new RegisterForm(client);
+            registerForm.ShowDialog();
         }
     }
 }
