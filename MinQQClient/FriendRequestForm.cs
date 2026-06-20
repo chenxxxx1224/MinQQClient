@@ -12,12 +12,6 @@ namespace MinQQClient
         private List<FriendRequestInfo> requests = new List<FriendRequestInfo>();
         private System.Threading.Timer refreshTimer;
 
-        // 用于等待消息响应的同步原语
-        private AutoResetEvent loadResponseEvent = new AutoResetEvent(false);
-        private AutoResetEvent processResponseEvent = new AutoResetEvent(false);
-        private NetMessage loadResponse;
-        private NetMessage processResponse;
-
         public FriendRequestForm(Client client)
         {
             InitializeComponent();
@@ -39,43 +33,40 @@ namespace MinQQClient
         // 处理服务端消息
         private void OnServerMessage(NetMessage msg)
         {
-            // 获取申请列表响应 (MsgType = 6)
-            if (msg.MsgType == 6 && loadResponse == null)
+            // 获取申请列表响应 (MsgType = 6)，直接更新列表
+            if (msg.MsgType == 6)
             {
-                loadResponse = msg;
-                loadResponseEvent.Set();
+                UpdateRequestsList(msg.Content);
             }
             // 处理申请响应 (MsgType = 7)
-            else if (msg.MsgType == 7 && processResponse == null)
+            else if (msg.MsgType == 7)
             {
-                processResponse = msg;
-                processResponseEvent.Set();
+                // 直接在事件回调中处理响应，不需要 WaitOne
+                if (msg.Content == "success")
+                {
+                    MessageBox.Show("操作成功！", "提示");
+                }
+                else
+                {
+                    MessageBox.Show("操作失败：" + msg.Content, "提示");
+                }
+                // 刷新列表
+                LoadRequests();
             }
         }
 
-        // 加载好友申请列表
+        // 加载好友申请列表（非阻塞方式，定时器调用）
         public void LoadRequests()
         {
             try
             {
-                // 重置响应状态
-                loadResponse = null;
-
-                // 发送请求（MsgType = 6）
+                // 发送请求（MsgType = 6），不等待响应
+                // 响应会通过 OnMessageReceived 事件接收，然后更新列表
                 client.SendMessageAsync(6, "");
-
-                // 等待响应（最多等5秒）
-                bool gotResponse = loadResponseEvent.WaitOne(5000);
-
-                if (gotResponse && loadResponse != null && loadResponse.MsgType == 6)
-                {
-                    // 格式：requestId:fromUserId:fromUsername,requestId:fromUserId:fromUsername,...
-                    UpdateRequestsList(loadResponse.Content);
-                }
             }
             catch (Exception ex)
             {
-                // 忽略错误，避免频繁刷新报错
+                // 忽略错误
             }
         }
 
@@ -136,31 +127,9 @@ namespace MinQQClient
 
             try
             {
-                // 重置响应状态
-                processResponse = null;
-
                 // 发送响应（MsgType = 7, 格式：requestId:accept）
+                // 响应会在 OnServerMessage 中处理
                 client.SendMessageAsync(7, $"{request.RequestId}:accept");
-
-                // 等待响应（最多等5秒）
-                bool gotResponse = processResponseEvent.WaitOne(5000);
-
-                if (gotResponse && processResponse != null && processResponse.MsgType == 7)
-                {
-                    if (processResponse.Content == "success")
-                    {
-                        MessageBox.Show($"已同意 {request.FromUsername} 的好友请求！", "提示");
-                        LoadRequests();  // 刷新列表
-                    }
-                    else
-                    {
-                        MessageBox.Show("操作失败：" + processResponse.Content, "提示");
-                    }
-                }
-                else
-                {
-                    MessageBox.Show("操作超时，请重试！", "提示");
-                }
             }
             catch (Exception ex)
             {
@@ -181,31 +150,9 @@ namespace MinQQClient
 
             try
             {
-                // 重置响应状态
-                processResponse = null;
-
                 // 发送响应（MsgType = 7, 格式：requestId:reject）
+                // 响应会在 OnServerMessage 中处理
                 client.SendMessageAsync(7, $"{request.RequestId}:reject");
-
-                // 等待响应（最多等5秒）
-                bool gotResponse = processResponseEvent.WaitOne(5000);
-
-                if (gotResponse && processResponse != null && processResponse.MsgType == 7)
-                {
-                    if (processResponse.Content == "success")
-                    {
-                        MessageBox.Show($"已拒绝 {request.FromUsername} 的好友请求！", "提示");
-                        LoadRequests();  // 刷新列表
-                    }
-                    else
-                    {
-                        MessageBox.Show("操作失败：" + processResponse.Content, "提示");
-                    }
-                }
-                else
-                {
-                    MessageBox.Show("操作超时，请重试！", "提示");
-                }
             }
             catch (Exception ex)
             {
@@ -230,8 +177,6 @@ namespace MinQQClient
         {
             // 取消订阅
             client.OnMessageReceived -= OnServerMessage;
-            loadResponseEvent.Dispose();
-            processResponseEvent.Dispose();
             refreshTimer?.Dispose();
             base.OnFormClosing(e);
         }
