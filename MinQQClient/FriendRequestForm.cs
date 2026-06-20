@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace MinQQClient
 {
-    public partial class FriendRequestForm : Form
+    public partial class FriendRequestForm : Sunny.UI.UIForm
     {
         private Client client;
         private List<FriendRequestInfo> requests = new List<FriendRequestInfo>();

@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace MinQQClient
 {
-    public partial class AddFriend : Form
+    public partial class AddFriend : Sunny.UI.UIForm
     {
         private Client client;
         private int? searchResultUserId;  // 搜索结果的用户ID

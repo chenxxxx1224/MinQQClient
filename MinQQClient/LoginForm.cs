@@ -1,13 +1,13 @@
-﻿using System;
+using System;
 using System.Windows.Forms;
 
 namespace MinQQClient
 {
-    public partial class Form1 : Form
+    public partial class LoginForm : Sunny.UI.UIForm
     {
         private Client client;
 
-        public Form1()
+        public LoginForm()
         {
             InitializeComponent();
             client = new Client();

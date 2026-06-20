@@ -10,7 +10,7 @@ using System.Windows.Forms;
 
 namespace MinQQClient
 {
-    public partial class Main : Form
+    public partial class Main : Sunny.UI.UIForm
     {
         private Client client;
         private List<int> onlineUserIds = new List<int>();  // 在线用户ID列表
