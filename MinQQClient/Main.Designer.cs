@@ -131,8 +131,8 @@ namespace MinQQClient
             this.lstOnlineUsers.MinimumSize = new System.Drawing.Size(1, 1);
             this.lstOnlineUsers.Name = "lstOnlineUsers";
             this.lstOnlineUsers.Padding = new System.Windows.Forms.Padding(2);
-            this.lstOnlineUsers.ShowText = false;
-            this.lstOnlineUsers.Size = new System.Drawing.Size(150, 470);
+            this.lstOnlineUsers.ShowText = true;
+            this.lstOnlineUsers.Size = new System.Drawing.Size(200, 470);
             this.lstOnlineUsers.TabIndex = 3;
             this.lstOnlineUsers.SelectedIndexChanged += new System.EventHandler(this.lstOnlineUsers_SelectedIndexChanged);
             // 

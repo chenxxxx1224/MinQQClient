@@ -17,10 +17,16 @@ namespace MinQQClient
         private Dictionary<int, string> onlineUsers = new Dictionary<int, string>();  // 用户ID -> 用户名
         private int currentChatUserId = -1;  // 当前聊天对象ID
         private Dictionary<int, List<ChatMessage>> chatHistories = new Dictionary<int, List<ChatMessage>>();  // 聊天记录
+        private Dictionary<int, int> unreadCounts = new Dictionary<int, int>();  // 好友未读消息计数
+        private readonly object _friendListLock = new object();  // 好友列表同步锁
+        private bool _isUpdatingList = false;  // 防止事件重入的标志
+        private DateTime _lastSelectedIndexChanged = DateTime.MinValue;  // 上次触发时间
+        private const int SELECTED_INDEX_CHANGED_THRESHOLD_MS = 50;  // 触发间隔阈值（毫秒）
 
         public Main(Client client)
         {
             InitializeComponent();
+
             this.client = client;
 
             // 设置标题
@@ -33,8 +39,7 @@ namespace MinQQClient
             // 启动后台接收消息
             Task.Run(() => ReceiveMessagesLoop());
 
-            // 主动获取在线用户列表
-            LoadOnlineUsers();
+            // 注意：好友列表由 HandleLogin 成功登录后自动返回，无需主动请求
         }
 
         // 加载在线用户列表
@@ -75,10 +80,17 @@ namespace MinQQClient
 
                         if (!string.IsNullOrEmpty(completeJson))
                         {
-                            var msg = JsonSerializer.Deserialize<NetMessage>(completeJson);
-                            HandleServerMessage(msg);
-                            // 触发消息事件，通知其他订阅者（如 AddFriendForm、FriendRequestForm）
-                            client.RaiseMessageReceived(msg);
+                            try
+                            {
+                                var msg = JsonSerializer.Deserialize<NetMessage>(completeJson);
+                                HandleServerMessage(msg);
+                                // 触发消息事件，通知其他订阅者（如 AddFriendForm、FriendRequestForm）
+                                client.RaiseMessageReceived(msg);
+                            }
+                            catch (Exception ex)
+                            {
+                                System.IO.File.AppendAllText("client_error.log", $"{DateTime.Now}: Handle message error: {ex}\n");
+                            }
                         }
                     }
                 }
@@ -103,11 +115,137 @@ namespace MinQQClient
                 case 8:  // 好友申请通知
                     HandleFriendRequestNotification(msg.Content);
                     break;
+                case 9:  // 离线消息推送
+                    ReceiveOfflineMessage(msg.Content);
+                    break;
+                case 11:  // 离线消息推送完毕
+                    HandleOfflineMessagesComplete(msg.Content);
+                    break;
                 case 100:  // 登录成功响应（不处理）
                     break;
                 case 101:  // 登录失败响应（不处理）
                     break;
             }
+        }
+
+        // 处理离线消息
+        private void ReceiveOfflineMessage(string content)
+        {
+            // 格式：senderId|senderName|content|sendTime
+            string[] parts = content.Split('|');
+            if (parts.Length < 4) return;
+
+            int senderId = int.Parse(parts[0]);
+            string senderName = parts[1];
+            string message = parts[2];
+            string sendTime = parts[3];
+
+            // 只更新数据，不更新 UI（UI 由 UpdateOnlineUsers 统一处理）
+            // 检查好友是否已在数据结构中
+            if (!onlineUsers.ContainsKey(senderId))
+            {
+                lock (_friendListLock)
+                {
+                    onlineUsers[senderId] = senderName;
+                    onlineUserIds.Add(senderId);
+                }
+            }
+
+            // 添加到聊天记录
+            if (!chatHistories.ContainsKey(senderId))
+            {
+                chatHistories[senderId] = new List<ChatMessage>();
+            }
+            chatHistories[senderId].Add(new ChatMessage { IsMine = false, SenderName = senderName, Content = message });
+
+            // 增加未读计数
+            if (!unreadCounts.ContainsKey(senderId))
+            {
+                unreadCounts[senderId] = 0;
+            }
+            unreadCounts[senderId]++;
+
+            // 显示系统消息提示
+            AppendSystemMessage($"收到离线消息 来自 {senderName}: {message}");
+        }
+
+        // 离线消息推送完毕
+        private void HandleOfflineMessagesComplete(string content)
+        {
+            try
+            {
+                int count = int.Parse(content);
+                AppendSystemMessage($"已接收 {count} 条离线消息");
+            }
+            catch { }
+        }
+
+        // 添加好友到列表（带徽章）
+        private void AddFriendToListBox(int friendId, string friendName, int unreadCount)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(() => AddFriendToListBox(friendId, friendName, unreadCount)));
+                return;
+            }
+
+            // 防止重复添加：检查好友是否已经在 UI 列表中
+            bool alreadyInList = false;
+            for (int i = 0; i < lstOnlineUsers.Items.Count; i++)
+            {
+                string item = lstOnlineUsers.Items[i].ToString();
+                if (item == friendName || item.StartsWith(friendName + " "))
+                {
+                    alreadyInList = true;
+                    break;
+                }
+            }
+
+            if (alreadyInList) return;
+
+            // 直接添加带徽章的文本（不使用 Items[index] 修改）
+            string displayText = unreadCount > 0 ? $"{friendName} 🔴{unreadCount}" : friendName;
+            lstOnlineUsers.Items.Add(displayText);
+        }
+
+        // 更新好友列表徽章显示
+        private void UpdateFriendBadge(int friendId)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action<int>(UpdateFriendBadge), friendId);
+                return;
+            }
+
+            // 设置标志，防止 RemoveAt+Insert 触发 SelectedIndexChanged 时清空未读计数
+            _isUpdatingList = true;
+
+            lock (_friendListLock)
+            {
+                if (!onlineUsers.ContainsKey(friendId) || !onlineUserIds.Contains(friendId))
+                {
+                    _isUpdatingList = false;
+                    return;
+                }
+
+                string username = onlineUsers[friendId];
+                int index = onlineUserIds.IndexOf(friendId);
+
+                if (index < 0 || index >= lstOnlineUsers.Items.Count)
+                {
+                    _isUpdatingList = false;
+                    return;
+                }
+
+                int unread = unreadCounts.ContainsKey(friendId) ? unreadCounts[friendId] : 0;
+                string newText = unread > 0 ? $"{username} 🔴{unread}" : username;
+
+                // 使用 Remove + Add 替换文本
+                lstOnlineUsers.Items.RemoveAt(index);
+                lstOnlineUsers.Items.Insert(index, newText);
+            }
+
+            _isUpdatingList = false;
         }
 
         // 处理好友申请通知
@@ -155,42 +293,55 @@ namespace MinQQClient
         {
             if (InvokeRequired)
             {
-                Invoke(new Action<string>(UpdateOnlineUsers), content);
+                BeginInvoke(new Action<string>(UpdateOnlineUsers), content);
                 return;
             }
 
-            // 格式：userId:username,userId:username,...
+            // 先设置标志，再清空列表
+            _isUpdatingList = true;
+
             lstOnlineUsers.Items.Clear();
-            onlineUsers.Clear();
-            onlineUserIds.Clear();
 
-            if (!string.IsNullOrEmpty(content))
+            lock (_friendListLock)
             {
-                string[] users = content.Split(',');
-                foreach (string user in users)
+                onlineUsers.Clear();
+                onlineUserIds.Clear();
+
+                if (!string.IsNullOrEmpty(content))
                 {
-                    if (string.IsNullOrEmpty(user)) continue;
-                    string[] parts = user.Split(':');
-                    if (parts.Length >= 2)
+                    string[] users = content.Split(',');
+                    foreach (string user in users)
                     {
-                        int userId = int.Parse(parts[0]);
-                        string username = parts[1];
+                        if (string.IsNullOrEmpty(user)) continue;
+                        string[] parts = user.Split(':');
+                        if (parts.Length >= 2)
+                        {
+                            int userId = int.Parse(parts[0]);
+                            string username = parts[1];
 
-                        // 不显示自己
-                        if (userId == client.UserId) continue;
+                            // 不显示自己
+                            if (userId == client.UserId) continue;
 
-                        onlineUsers[userId] = username;
-                        onlineUserIds.Add(userId);
-                        lstOnlineUsers.Items.Add(username);
+                            onlineUsers[userId] = username;
+                            onlineUserIds.Add(userId);
+
+                            // 检查是否有未读消息，有则显示徽章
+                            int unread = unreadCounts.ContainsKey(userId) ? unreadCounts[userId] : 0;
+                            string displayText = unread > 0 ? $"{username} 🔴{unread}" : username;
+                            lstOnlineUsers.Items.Add(displayText);
+                        }
                     }
+                }
+
+                // 默认选中第一个用户
+                if (lstOnlineUsers.Items.Count > 0)
+                {
+                    lstOnlineUsers.SelectedIndex = 0;
                 }
             }
 
-            // 默认选中第一个用户
-            if (lstOnlineUsers.Items.Count > 0)
-            {
-                lstOnlineUsers.SelectedIndex = 0;
-            }
+            // 延迟重置标志
+            Task.Delay(200).ContinueWith(_ => _isUpdatingList = false);
         }
 
         // 收到聊天消息
@@ -222,13 +373,21 @@ namespace MinQQClient
             }
             chatHistories[senderId].Add(new ChatMessage { IsMine = false, SenderName = senderName, Content = message });
 
-            // 如果是当前聊天对象，显示消息
+            // 如果是当前聊天对象，显示消息；否则增加未读计数
             if (senderId == currentChatUserId)
             {
                 AppendChatMessage(false, senderName, message);
             }
             else
             {
+                // 增加未读计数并更新徽章
+                if (!unreadCounts.ContainsKey(senderId))
+                {
+                    unreadCounts[senderId] = 0;
+                }
+                unreadCounts[senderId]++;
+                UpdateFriendBadge(senderId);
+
                 // 未读提示
                 AppendSystemMessage($"收到来自 {senderName} 的消息");
             }
@@ -277,9 +436,28 @@ namespace MinQQClient
         // 选择聊天对象
         private void lstOnlineUsers_SelectedIndexChanged(object sender, EventArgs e)
         {
+            // 防止短时间内多次触发
+            var now = DateTime.Now;
+            if ((now - _lastSelectedIndexChanged).TotalMilliseconds < SELECTED_INDEX_CHANGED_THRESHOLD_MS)
+            {
+                return; // 忽略过快触发的事件
+            }
+            _lastSelectedIndexChanged = now;
+
+            if (_isUpdatingList) return;  // 防止在更新列表时重入
+
             if (lstOnlineUsers.SelectedIndex >= 0 && lstOnlineUsers.SelectedIndex < onlineUserIds.Count)
             {
-                currentChatUserId = onlineUserIds[lstOnlineUsers.SelectedIndex];
+                int selectedFriendId = onlineUserIds[lstOnlineUsers.SelectedIndex];
+
+                // 清空该好友的未读计数（只在用户主动选择时清零）
+                if (unreadCounts.ContainsKey(selectedFriendId) && unreadCounts[selectedFriendId] > 0)
+                {
+                    unreadCounts[selectedFriendId] = 0;
+                    UpdateFriendBadge(selectedFriendId);
+                }
+
+                currentChatUserId = selectedFriendId;
                 string targetName = onlineUsers[currentChatUserId];
                 lblTitle.Text = $"正在和 {targetName} 聊天";
 
@@ -297,7 +475,7 @@ namespace MinQQClient
             {
                 foreach (var msg in chatHistories[currentChatUserId])
                 {
-                    AppendChatMessage(msg.IsMine, msg.SenderName, msg.Content, addNewLine: false);
+                    AppendChatMessage(msg.IsMine, msg.SenderName, msg.Content, addNewLine: true);
                 }
             }
         }
@@ -307,7 +485,7 @@ namespace MinQQClient
         {
             if (InvokeRequired)
             {
-                Invoke(new Action(() => AppendChatMessage(isMine, senderName, content, addNewLine)));
+                BeginInvoke(new Action(() => AppendChatMessage(isMine, senderName, content, addNewLine)));
                 return;
             }
 
@@ -328,7 +506,7 @@ namespace MinQQClient
         {
             if (InvokeRequired)
             {
-                Invoke(new Action<string>(AppendSystemMessage), content);
+                BeginInvoke(new Action<string>(AppendSystemMessage), content);
                 return;
             }
 

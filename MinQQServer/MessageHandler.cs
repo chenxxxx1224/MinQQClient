@@ -114,6 +114,50 @@ public static class MessageHandler
             Console.WriteLine("登录数据格式错误！");
             await SendResponseAsync(clientInfo.Stream, 101, "fail");
         }
+
+        // 登录成功后，推送离线消息
+        await SendOfflineMessagesAsync(clientInfo);
+    }
+
+    // 推送离线消息给用户
+    private static async Task SendOfflineMessagesAsync(ClientInfo clientInfo)
+    {
+        // 查询该用户的所有离线消息（发送给它的、且未读的消息）
+        string sql = $@"
+            SELECT m.MessageID, m.SenderID, u.Username AS SenderName, 
+                   m.Content, CONVERT(VARCHAR, m.SendTime, 120) AS SendTime
+            FROM [Message] m
+            INNER JOIN [User] u ON m.SenderID = u.UserID
+            WHERE m.ReceiverID = {clientInfo.UserId} AND m.IsRead = 0
+            ORDER BY m.SendTime ASC";
+
+        var result = Dao.getData(sql);
+        int count = 0;
+
+        if (result != null && result.Rows.Count > 0)
+        {
+            foreach (System.Data.DataRow row in result.Rows)
+            {
+                int senderId = Convert.ToInt32(row["SenderID"]);
+                string senderName = row["SenderName"].ToString();
+                string content = row["Content"].ToString();
+                string sendTime = row["SendTime"].ToString();
+
+                // 格式：senderId|senderName|content|sendTime
+                string msgContent = $"{senderId}|{senderName}|{content}|{sendTime}";
+                await SendResponseAsync(clientInfo.Stream, 9, msgContent);
+                count++;
+
+                // 标记消息为已读
+                int messageId = Convert.ToInt32(row["MessageID"]);
+                string updateSql = $"UPDATE [Message] SET IsRead = 1 WHERE MessageID = {messageId}";
+                Dao.CUD(updateSql);
+            }
+        }
+
+        // 发送离线消息推送完毕通知（MsgType 11）
+        await SendResponseAsync(clientInfo.Stream, 11, count.ToString());
+        Console.WriteLine($"[离线消息] 已向用户 {clientInfo.Username} 推送 {count} 条离线消息");
     }
 
     // 处理聊天消息
@@ -420,5 +464,6 @@ public static class MessageHandler
         string json = JsonSerializer.Serialize(response);
         byte[] data = Encoding.UTF8.GetBytes(json + "\n");
         await stream.WriteAsync(data, 0, data.Length);
+        await stream.FlushAsync();  // 确保数据发送到底层网络
     }
 }
