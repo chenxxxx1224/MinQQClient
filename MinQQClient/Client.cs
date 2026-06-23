@@ -18,7 +18,7 @@ namespace MinQQClient
         public int UserId { get; set; }
         public string Username { get; set; }
 
-        // 消息回调事件（解决多个接收者竞争消息的问题）
+        // 定义分发列表，解决多个接收者竞争消息的问题
         public event Action<NetMessage> OnMessageReceived;
 
         public async Task ConnectAsync(string ip = "127.0.0.1", int port = 8888)
@@ -37,7 +37,7 @@ namespace MinQQClient
             await _stream.WriteAsync(data, 0, data.Length);
         }
 
-        // 触发消息事件（供 Main.cs 调用）
+        // 触发消息事件
         public void RaiseMessageReceived(NetMessage msg)
         {
             OnMessageReceived?.Invoke(msg);

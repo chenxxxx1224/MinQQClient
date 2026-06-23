@@ -23,7 +23,7 @@ namespace MinQQClient
             InitializeComponent();
             this.client = client;
 
-            // 订阅消息事件
+            // 订阅消息事件2
             client.OnMessageReceived += OnServerMessage;
 
             // 加载好友申请列表
