@@ -1,6 +1,6 @@
-namespace MinQQClient.View
+namespace MinQQClient
 {
-    partial class MainForm
+    partial class Main
     {
         /// <summary>
         /// Required designer variable.

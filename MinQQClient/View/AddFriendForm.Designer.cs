@@ -1,6 +1,6 @@
-namespace MinQQClient.View
+namespace MinQQClient
 {
-    partial class AddFriendForm
+    partial class AddFriend
     {
         /// <summary>
         /// Required designer variable.
@@ -129,7 +129,7 @@ namespace MinQQClient.View
             this.Controls.Add(this.btnSearch);
             this.Controls.Add(this.txtSearch);
             this.Controls.Add(this.label1);
-            this.Name = "AddFriendForm";
+            this.Name = "AddFriend";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "添加好友";
             this.ZoomScaleRect = new System.Drawing.Rectangle(22, 22, 434, 321);

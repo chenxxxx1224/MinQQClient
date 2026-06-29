@@ -1,4 +1,4 @@
-namespace MinQQClient.View
+namespace MinQQClient
 {
     partial class FriendRequestForm
     {
